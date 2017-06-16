@@ -28,6 +28,7 @@ import (
 	"net/mail"
 	"net/smtp"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -479,8 +480,9 @@ type slackAttachment struct {
 	Text      string `json:"text"`
 	Fallback  string `json:"fallback"`
 
-	Color    string   `json:"color,omitempty"`
-	MrkdwnIn []string `json:"mrkdwn_in,omitempty"`
+	Color    string              `json:"color,omitempty"`
+	MrkdwnIn []string            `json:"mrkdwn_in,omitempty"`
+	Fields   []map[string]string `json:"fields,omitempty"`
 }
 
 // slackAttachmentField is displayed in a table inside the message attachment.
@@ -498,6 +500,23 @@ func (n *Slack) Notify(ctx context.Context, as ...*types.Alert) (bool, error) {
 		tmplText = tmplText(n.tmpl, data, &err)
 	)
 
+	fields := []map[string]string{}
+	for _, alert := range data.Alerts {
+		field := map[string]string{}
+		if val, ok := alert.Annotations["slack_field_title"]; ok {
+			field["title"] = val
+		}
+		if val, ok := alert.Annotations["slack_field_value"]; ok {
+			field["value"] = val
+		}
+		if val, ok := alert.Annotations["slack_field_short"]; ok {
+			if _, err := strconv.ParseBool(val); err == nil {
+				field["short"] = val
+			}
+		}
+		fields = append(fields, field)
+	}
+
 	attachment := &slackAttachment{
 		Title:     tmplText(n.conf.Title),
 		TitleLink: tmplText(n.conf.TitleLink),
@@ -506,6 +525,7 @@ func (n *Slack) Notify(ctx context.Context, as ...*types.Alert) (bool, error) {
 		Fallback:  tmplText(n.conf.Fallback),
 		Color:     tmplText(n.conf.Color),
 		MrkdwnIn:  []string{"fallback", "pretext", "text"},
+		Fields:    fields,
 	}
 	req := &slackReq{
 		Channel:     tmplText(n.conf.Channel),
